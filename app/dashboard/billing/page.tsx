@@ -1,376 +1,232 @@
-'use client'
+"use client";
 
-import { useState, useEffect } from 'react'
-import { DollarSign } from 'lucide-react'
-import { toast } from "react-hot-toast"
-import { useSession } from 'next-auth/react'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { DataTable } from '@/components/ui/data-table'
-import { StatusBadge } from '@/components/ui/status-badge'
-import { CustomSelect } from '@/components/ui/custom-select'
-import { formatCurrency } from '@/lib/utils'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
-import { Input } from '@/components/ui/input'
-import { useForm, Controller } from 'react-hook-form'
+import { useEffect, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
+import { Billing } from "@/types/billing";
+import { Button } from "@/components/ui/button";
 
-type InvoiceWithRelations = Invoice & {
-    booking: Booking & {
-        customer: Customer
-        room: Room & {
-            roomType: RoomType
-        }
-    }
-}
-
-interface PaymentFormData {
-    paymentStatus: PaymentStatus
-    paymentMethod: PaymentMethod
-    paidAmount: number
-}
-
+import { Input } from "@/components/ui/input";
+import { deleteApi, getApi, putApi } from "@/lib/api";
+import { CircleCheck, CircleX, Pencil, Trash2 } from "lucide-react";
+import toast from "react-hot-toast/headless";
+import DropdownMenu from "@/components/ui/dropdown-menu";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCell,
+} from "@/components/ui/table";
+import BillingFormModal from "@/components/billing/BillingFormModel";
 export default function BillingPage() {
-    const { data: session } = useSession()
-    const [invoices, setInvoices] = useState<InvoiceWithRelations[]>([])
-    const [isLoading, setIsLoading] = useState(true)
-    const [statusFilter, setStatusFilter] = useState<string>('')
-    const [page, setPage] = useState(1)
-    const [total, setTotal] = useState(0)
-    const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
-    const [selectedInvoice, setSelectedInvoice] = useState<InvoiceWithRelations | null>(null)
+  const { loading } = useAuth();
 
-    const canManage = session?.user.role && ['SUPER_ADMIN', 'COMPANY_ADMIN', 'BRAND_MANAGER', 'BRANCH_MANAGER'].includes(session.user.role)
+  const [Billing, setBilling] = useState<Billing[]>([]);
+  const [open, setOpen] = useState(false);
+  const [selectedBilling, setSelectedBilling] = useState<Billing | null>(null);
 
-    const {
-        register,
-        handleSubmit,
-        formState: { isSubmitting },
-        reset,
-        watch,
-        control,
-    } = useForm<PaymentFormData>()
+  // 🔥 Pagination + Search state
+  const [page, setPage] = useState(1);
+  const [limit] = useState(10);
+  const [totalPages, setTotalPages] = useState(1);
+  const [search, setSearch] = useState("");
 
-    const paymentStatus = watch('paymentStatus')
-    const paymentMethod = watch('paymentMethod')
+  useEffect(() => {
+    fetchBilling();
+  }, [page, search]);
 
-    useEffect(() => {
-        fetchInvoices()
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [statusFilter, page])
-
-    useEffect(() => {
-        if (selectedInvoice) {
-            reset({
-                paymentStatus: selectedInvoice.paymentStatus,
-                paymentMethod: selectedInvoice.paymentMethod || PaymentMethod.CASH,
-                paidAmount: Number(selectedInvoice.paidAmount),
-            })
-        }
-    }, [selectedInvoice, reset])
-
-    const fetchInvoices = async () => {
-        setIsLoading(true)
-        try {
-            const params = new URLSearchParams()
-            if (statusFilter) params.append('status', statusFilter)
-            params.append('page', page.toString())
-
-            const response = await fetch(`/api/dashboard/billing?${params}`)
-            if (response.ok) {
-                const data = await response.json()
-                setInvoices(data.invoices)
-                setTotal(data.pagination.total)
-            }
-        } catch (error) {
-            console.error('Error fetching invoices:', error)
-            toast.error('Failed to fetch invoices')
-        } finally {
-            setIsLoading(false)
-        }
+  const fetchBilling = async () => {
+    try {
+      const res = await getApi(
+        `/invoices?page=${page}&limit=${limit}&search=${search}`,
+      );
+      setBilling(res.data || []);
+      setTotalPages(res.pagination?.totalPages || 1);
+    } catch (error) {
+      console.error("Fetch error");
     }
+  };
 
-    const handlePaymentUpdate = async (data: PaymentFormData) => {
-        if (!selectedInvoice) return
+  const handleEdit = (Billing: Billing) => {
+    setSelectedBilling(Billing);
+    setOpen(true);
+  };
 
-        try {
-            const response = await fetch(`/api/dashboard/billing/${selectedInvoice.id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-            })
+  const handleAdd = () => {
+    setSelectedBilling(null);
+    setOpen(true);
+  };
 
-            if (response.ok) {
-                toast.success('Payment updated successfully')
-                setIsPaymentModalOpen(false)
-                setSelectedInvoice(null)
-                fetchInvoices()
-            } else {
-                toast.error('Failed to update payment')
-            }
-        } catch {
-            toast.error('An error occurred')
-        }
+  const handleToggleStatus = async (id: string, currentStatus: boolean) => {
+    const res = await putApi(`/invoices/${id}/change-status`, {
+      isActive: !currentStatus,
+    });
+    if (res.success) {
+      toast.success(res.message || "Status updated successfully"); // refresh list
+      fetchBilling();
+    } else {
+      toast.error("Failed to update status");
     }
-
-    const handleUpdatePayment = (invoice: InvoiceWithRelations) => {
-        setSelectedInvoice(invoice)
-        setIsPaymentModalOpen(true)
+  };
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this Billing?")) return;
+    const res = await deleteApi(`/invoices/${id}`);
+    if (res.success) {
+      toast.success(res.message || "Billing deleted successfully"); // refresh list
+      fetchBilling(); // refresh list
+    } else {
+      toast.error("Failed to delete");
     }
+  };
 
-    const columns = [
-        {
-            header: 'Invoice #',
-            accessor: 'invoiceNumber' as keyof Invoice,
-            cell: (value: unknown) => <span className="font-medium">{String(value)}</span>,
-        },
-        {
-            header: 'Booking #',
-            accessor: (row: InvoiceWithRelations) => row.booking.bookingNumber,
-        },
-        {
-            header: 'Customer',
-            accessor: (row: InvoiceWithRelations) => row.booking.customer.name,
-        },
-        {
-            header: 'Room',
-            accessor: (row: InvoiceWithRelations) => `${row.booking.room.roomNumber} (${row.booking.room.roomType.name})`,
-        },
-        {
-            header: 'Amount',
-            accessor: (row: InvoiceWithRelations) => formatCurrency(row.finalAmount.toString()),
-        },
-        {
-            header: 'Paid',
-            accessor: (row: InvoiceWithRelations) => formatCurrency(row.paidAmount.toString()),
-        },
-        {
-            header: 'Payment Status',
-            accessor: (row: InvoiceWithRelations) => (
-                <StatusBadge status={row.paymentStatus} />
-            ),
-        },
-        {
-            header: 'Method',
-            accessor: (row: InvoiceWithRelations) => row.paymentMethod || 'N/A',
-        },
-        {
-            header: 'Actions',
-            accessor: (row: InvoiceWithRelations) => (
-                canManage && row.paymentStatus !== PaymentStatus.PAID ? (
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleUpdatePayment(row)}
-                    >
-                        <DollarSign className="mr-2 h-4 w-4" />
-                        Update Payment
-                    </Button>
-                ) : null
-            ),
-        },
-    ]
+  if (loading) return <div>Loading...</div>;
 
-    // Calculate statistics
-    const stats = {
-        totalRevenue: invoices.reduce((sum, inv) => sum + Number(inv.finalAmount), 0),
-        totalPaid: invoices.reduce((sum, inv) => sum + Number(inv.paidAmount), 0),
-        pending: invoices.filter(inv => inv.paymentStatus === PaymentStatus.PENDING).length,
-        paid: invoices.filter(inv => inv.paymentStatus === PaymentStatus.PAID).length,
-    }
+  return (
+    <div>
+      {/* HEADER */}
+      <div className="flex justify-between mb-6">
+        <h1 className="text-2xl font-bold">Billing</h1>
+        <Button onClick={handleAdd}>Add Billing</Button>
+      </div>
 
-    return (
-        <div>
-            <div className="mb-8">
-                <h1 className="text-3xl font-semibold">Billing & Payments</h1>
-                <p className="mt-2 text-muted-foreground">Manage invoices and payment processing</p>
-            </div>
+      {/* 🔍 SEARCH */}
+      <div className="mb-4">
+        <Input
+          placeholder="Search Billing..."
+          value={search}
+          onChange={(e) => {
+            setPage(1);
+            setSearch(e.target.value);
+          }}
+        />
+      </div>
 
-            {/* Statistics Cards */}
-            <div className="mb-6 grid gap-4 md:grid-cols-4">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{formatCurrency(stats.totalRevenue.toString())}</div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Paid</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-green-600">{formatCurrency(stats.totalPaid.toString())}</div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Pending Payments</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-orange-600">{stats.pending}</div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Paid Invoices</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{stats.paid}</div>
-                    </CardContent>
-                </Card>
-            </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>#</TableHead>
+            <TableHead>Invoice Number</TableHead>
+            <TableHead>Booking Number</TableHead>
+            <TableHead>Amount</TableHead>
+            <TableHead>Tax</TableHead>
+            <TableHead>Discount</TableHead>
+            <TableHead>Final Amount</TableHead>
+            <TableHead>Payment Status</TableHead>
+            <TableHead>Payment Method</TableHead>
+            <TableHead>Created At</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {Billing.length === 0 ? (
+            <TableRow>
+              <TableCell
+                colSpan={9}
+                className="text-center text-gray-400 py-10"
+              >
+                No Amenities found.
+              </TableCell>
+            </TableRow>
+          ) : (
+            Billing.map((b, index) => (
+              <TableRow key={b.id}>
+                <TableCell className="text-gray-400">{index + 1}</TableCell>
 
-            <Card className="mb-6">
-                <CardHeader>
-                    <CardTitle>Filters</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="w-64">
-                        <CustomSelect
-                            value={statusFilter ? { label: statusFilter.replace(/_/g, ' '), value: statusFilter } : null}
-                            onChange={(option) => {
-                                setStatusFilter(option?.value === '_' ? '' : option?.value || '')
-                                setPage(1)
-                            }}
-                            options={[
-                                { label: 'All Statuses', value: '_' },
-                                { label: 'Pending', value: PaymentStatus.PENDING },
-                                { label: 'Paid', value: PaymentStatus.PAID },
-                                { label: 'Partially Paid', value: PaymentStatus.PARTIALLY_PAID },
-                                { label: 'Refunded', value: PaymentStatus.REFUNDED },
-                            ]}
-                            placeholder="Filter by Status"
-                            isClearable={false}
-                        />
-                    </div>
-                </CardContent>
-            </Card>
+                <TableCell className="font-medium text-gray-800">
+                  {b.invoiceNumber}
+                </TableCell>
+                <TableCell className="text-gray-600">
+                  {b.booking.bookingNumber}
+                </TableCell>
+                <TableCell className="text-gray-600">{b.amount}</TableCell>
+                <TableCell className="text-gray-600">{b.tax}</TableCell>
+                <TableCell className="text-gray-600">{b.discount}</TableCell>
+                <TableCell className="text-gray-600">{b.finalAmount}</TableCell>
+                <TableCell className="text-gray-600">
+                  {b.paymentStatus}
+                </TableCell>
+                <TableCell className="text-gray-600">
+                  {b.paymentMethod}
+                </TableCell>
 
-            {isLoading ? (
-                <Card>
-                    <CardContent className="flex items-center justify-center py-12">
-                        <div className="text-muted-foreground">Loading...</div>
-                    </CardContent>
-                </Card>
-            ) : (
-                <DataTable
-                    data={invoices}
-                    columns={columns}
-                    emptyMessage="No invoices found. Invoices are automatically created with bookings."
-                />
-            )}
+                <TableCell>
+                  <span
+                    className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                      b.isActive
+                        ? "bg-green-100 text-green-700"
+                        : "bg-gray-100 text-gray-500"
+                    }`}
+                  >
+                    {b.isActive ? "Active" : "Inactive"}
+                  </span>
+                </TableCell>
 
-            {total > 0 && (
-                <div className="mt-6 flex items-center justify-between">
-                    <p className="text-sm text-muted-foreground">
-                        Showing {(page - 1) * 10 + 1} to {Math.min(page * 10, total)} of {total} results
-                    </p>
-                    <div className="flex space-x-2">
-                        <Button
-                            variant="outline"
-                            onClick={() => setPage(page - 1)}
-                            disabled={page === 1}
-                        >
-                            Previous
-                        </Button>
-                        <Button
-                            variant="outline"
-                            onClick={() => setPage(page + 1)}
-                            disabled={page * 10 >= total}
-                        >
-                            Next
-                        </Button>
-                    </div>
-                </div>
-            )}
+                <TableCell className="text-gray-500">
+                  {new Date(b.createdAt).toLocaleDateString("en-IN", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </TableCell>
+                <TableCell className="text-right">
+                  <DropdownMenu
+                    items={[
+                      {
+                        label: "Edit",
+                        icon: <Pencil size={14} className="text-blue-500" />,
+                        onClick: () => handleEdit(b),
+                      },
+                      {
+                        label: b.isActive ? "Set Inactive" : "Set Active",
+                        icon: b.isActive ? (
+                          <CircleX size={14} className="text-orange-500" />
+                        ) : (
+                          <CircleCheck size={14} className="text-green-500" />
+                        ),
+                        onClick: () => handleToggleStatus(b.id, b.isActive),
+                        dividerAfter: true,
+                      },
+                      {
+                        label: "Delete",
+                        icon: <Trash2 size={14} />,
+                        onClick: () => handleDelete(b.id),
+                        className: "text-red-600 hover:bg-red-50",
+                      },
+                    ]}
+                  />
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
 
-            <Dialog open={isPaymentModalOpen} onOpenChange={setIsPaymentModalOpen}>
-                <DialogContent className="sm:max-w-[500px]">
-                    <DialogHeader>
-                        <DialogTitle>Update Payment</DialogTitle>
-                    </DialogHeader>
+      {/* 📄 PAGINATION */}
+      <div className="flex justify-center mt-6 gap-2">
+        <Button disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
+          Prev
+        </Button>
 
-                    {selectedInvoice && (
-                        <div className="mb-4">
-                            <p className="text-sm text-muted-foreground">
-                                Invoice: <span className="font-medium">{selectedInvoice.invoiceNumber}</span>
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                                Total Amount: <span className="font-medium">{formatCurrency(selectedInvoice.finalAmount.toString())}</span>
-                            </p>
-                        </div>
-                    )}
+        <span className="px-4 py-2">
+          Page {page} of {totalPages}
+        </span>
 
-                    <form onSubmit={handleSubmit(handlePaymentUpdate)} className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="paymentStatus">Payment Status *</Label>
-                            <Controller
-                                name="paymentStatus"
-                                control={control}
-                                render={({ field }) => (
-                                    <CustomSelect
-                                        value={paymentStatus ? { label: paymentStatus.replace(/_/g, ' '), value: paymentStatus } : null}
-                                        onChange={(option) => field.onChange(option?.value)}
-                                        options={[
-                                            { label: 'Pending', value: PaymentStatus.PENDING },
-                                            { label: 'Paid', value: PaymentStatus.PAID },
-                                            { label: 'Partially Paid', value: PaymentStatus.PARTIALLY_PAID },
-                                            { label: 'Refunded', value: PaymentStatus.REFUNDED },
-                                        ]}
-                                        placeholder="Select Status"
-                                        isClearable={false}
-                                    />
-                                )}
-                            />
-                        </div>
+        <Button
+          disabled={page === totalPages}
+          onClick={() => setPage((p) => p + 1)}
+        >
+          Next
+        </Button>
+      </div>
 
-                        <div className="space-y-2">
-                            <Label htmlFor="paymentMethod">Payment Method *</Label>
-                            <Controller
-                                name="paymentMethod"
-                                control={control}
-                                render={({ field }) => (
-                                    <CustomSelect
-                                        value={paymentMethod ? { label: paymentMethod.replace(/_/g, ' '), value: paymentMethod } : null}
-                                        onChange={(option) => field.onChange(option?.value)}
-                                        options={[
-                                            { label: 'Cash', value: PaymentMethod.CASH },
-                                            { label: 'Credit Card', value: PaymentMethod.CREDIT_CARD },
-                                            { label: 'Debit Card', value: PaymentMethod.DEBIT_CARD },
-                                            { label: 'UPI', value: PaymentMethod.UPI },
-                                            { label: 'Net Banking', value: PaymentMethod.NET_BANKING },
-                                        ]}
-                                        placeholder="Select Method"
-                                        isClearable={false}
-                                    />
-                                )}
-                            />
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label htmlFor="paidAmount">Paid Amount *</Label>
-                            <Input
-                                id="paidAmount"
-                                type="number"
-                                step="0.01"
-                                {...register('paidAmount', { valueAsNumber: true })}
-                            />
-                        </div>
-
-                        <div className="flex justify-end space-x-3 pt-4">
-                            <Button type="button" variant="outline" onClick={() => setIsPaymentModalOpen(false)}>
-                                Cancel
-                            </Button>
-                            <Button type="submit" disabled={isSubmitting}>
-                                {isSubmitting ? 'Updating...' : 'Update Payment'}
-                            </Button>
-                        </div>
-                    </form>
-                </DialogContent>
-            </Dialog>
-        </div>
-    )
+      {/* MODAL */}
+      <BillingFormModal
+        open={open}
+        setOpen={setOpen}
+        selectedBilling={selectedBilling}
+        onSuccess={fetchBilling}
+      />
+    </div>
+  );
 }
-
