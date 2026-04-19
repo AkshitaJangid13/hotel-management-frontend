@@ -52,5 +52,5 @@ export const bookingSchema = yup.object({
   tax: yup.number().min(0, "Tax cannot be negative").default(0),
 
   status: yup.string().required(),
-  specialRequests: yup.string().optional().nullable(),
+  specialRequests: yup.string().optional(),
 });

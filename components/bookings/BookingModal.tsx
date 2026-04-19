@@ -43,7 +43,7 @@ export default function BookingFormModal({
     formState: { errors, isSubmitting },
   } = useForm<BookingFormData>({
     mode: "onBlur",
-    resolver: yupResolver(bookingSchema),
+    resolver: yupResolver(bookingSchema) as any,
   });
   const submitRef = useRef(false);
   // ✅ Reset form when modal opens or selectedBooking changes
@@ -62,7 +62,7 @@ export default function BookingFormModal({
           discount: selectedBooking.discount ?? 0,
           tax: selectedBooking.tax ?? 0,
           status: selectedBooking.status,
-          specialRequests: selectedBooking.specialRequests ?? "",
+          specialRequests: selectedBooking.specialRequests,
         });
       } else {
         reset({
