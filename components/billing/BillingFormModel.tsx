@@ -15,7 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { postApi, putApi } from "@/lib/api";
+import { getApi, postApi, putApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { billingSchema } from "@/validation/billing";
 
@@ -73,6 +73,29 @@ export default function BillingFormModal({
     }
   }, [selectedBilling, open]);
 
+  const bookingId = watch("bookingId");
+
+  useEffect(() => {
+    if (!bookingId) return;
+
+    const fetchBooking = async () => {
+      try {
+        const res = await getApi(`/bookings/${bookingId}`);
+        const booking = await res.json();
+
+        if (!booking) return;
+
+        setValue("amount", booking.totalAmount, { shouldValidate: true });
+        setValue("tax", booking.tax, { shouldValidate: true });
+        setValue("discount", booking.discount, { shouldValidate: true });
+        setValue("finalAmount", booking.finalAmount, { shouldValidate: true });
+      } catch (err) {
+        console.error("Failed to fetch booking", err);
+      }
+    };
+
+    fetchBooking();
+  }, [bookingId, setValue]);
   const onSubmit = async (data: BillingFormData) => {
     try {
       const url = selectedBilling
@@ -123,20 +146,11 @@ export default function BillingFormModal({
         >
           <div>
             <Label className="mb-2">Booking</Label>
-            {/* <BookingSelect
-              value={watch("bookingId") ?? ""}
-              onChange={(val: string) => {
-                const booking = bookings.find((b) => b.id === val);
-                if (!booking) return;
-
-                setValue("bookingId", booking.id);
-                setValue("amount", booking.totalAmount);
-                setValue("tax", booking.tax);
-                setValue("discount", booking.discount);
-                setValue("finalAmount", booking.finalAmount);
-              }}
+            <BookingSelect
+              value={bookingId ?? ""}
+              onChange={(val: string) => setValue("bookingId", val)}
               error={errors.bookingId?.message}
-            /> */}
+            />
             <p className="text-red-500">{errors.bookingId?.message}</p>
           </div>
 

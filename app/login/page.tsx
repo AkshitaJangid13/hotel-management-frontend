@@ -34,13 +34,14 @@ const LoginPage = () => {
 
           <div>
             <Label>Email</Label>
-            <Input onChange={(e) => setEmail(e.target.value)} />
+            <Input value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
 
           <div>
             <Label>Password</Label>
             <Input
               type="password"
+              value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
           </div>
