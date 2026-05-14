@@ -146,7 +146,7 @@ export default function DashboardPage() {
             New Booking
           </Link>
 
-          <Link href="/dashboard/customers" className="border p-4 rounded">
+          <Link href="/dashboard/customer" className="border p-4 rounded">
             Add Customer
           </Link>
 
