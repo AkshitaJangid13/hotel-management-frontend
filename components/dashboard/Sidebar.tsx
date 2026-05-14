@@ -52,7 +52,7 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <div className="flex h-full w-64 flex-col border-r border-gray-200 bg-white">
+    <div className="flex h-full w-64 flex-col overflow-y-auto hide-scrollbar border-r border-gray-200 bg-white">
       <div className="flex h-16 items-center border-b border-gray-200 px-6">
         <h1 className="text-xl font-semibold text-gray-900">HMS</h1>
       </div>
@@ -85,7 +85,7 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="border-t p-4">
+      {/* <div className="border-t p-4">
         <Button
           variant="ghost"
           className="w-full justify-start"
@@ -94,7 +94,7 @@ export function Sidebar() {
           <LogOut className="mr-3 h-5 w-5" />
           Sign Out
         </Button>
-      </div>
+      </div> */}
     </div>
   );
 }
