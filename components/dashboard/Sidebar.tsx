@@ -44,8 +44,8 @@ const navigation = [
     icon: ClipboardList,
   },
   { name: "Billing", href: "/dashboard/billing", icon: DollarSign },
-  { name: "Reports", href: "/dashboard/reports", icon: BarChart3 },
-  { name: "Settings", href: "/dashboard/settings", icon: Settings },
+  // { name: "Reports", href: "/dashboard/reports", icon: BarChart3 },
+  // { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
 export function Sidebar() {
